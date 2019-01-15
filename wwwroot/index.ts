@@ -28,6 +28,7 @@ function main() {
     const animBtn = document.getElementById("button-anim") as HTMLButtonElement;
     const mouseBtn = document.getElementById("button-mouse") as HTMLButtonElement;
     const stopBtn = document.getElementById("button-stop") as HTMLButtonElement;
+    const jankElem = document.getElementById("check-jank") as HTMLInputElement;
 
     const timelineRowCount = 8;
     const timelineRowHeight = 40;
@@ -53,7 +54,7 @@ function main() {
 
     let oldAngle = 0;
 
-    let socket: WebSocket = null;
+    let socketWorker = new Worker("sockets.js");
 
     type ImageDecoder = Worker | HTMLImageElement;
 
@@ -75,7 +76,7 @@ function main() {
     const imageDecodingWorkers = [...Array(3)].map(createImageDecoder);
 
     function loadImageWithWorker(frameId: number, imageView: Uint8Array):
-        Promise<HTMLImageElement|ImageBitmap> {
+        Promise<HTMLImageElement | ImageBitmap> {
         const decoder = imageDecodingWorkers.filter(isDecoderReady)[0];
 
         return new Promise((resolve, reject) => {
@@ -128,7 +129,7 @@ function main() {
         statsElem.width = rect.width * scale;
         statsElem.height = rect.height * scale;
 
-        const ctx = statsElem.getContext("2d");
+        const ctx = statsElem.getContext("2d")!;
         ctx.font = "12px monospace";
         ctx.textAlign = "left";
         ctx.setTransform(scale, 0, 0, scale, 0, 0);
@@ -146,7 +147,7 @@ function main() {
         timelineElem.style.width = timelineWidth + "px";
         timelineElem.style.height = timelineHeight + "px";
 
-        const ctx = timelineElem.getContext("2d");
+        const ctx = timelineElem.getContext("2d")!;
         ctx.font = "6px sans-serif";
         ctx.imageSmoothingEnabled = false;
 
@@ -185,7 +186,7 @@ function main() {
 
         const [x, y] = getTimelineXY(timeMS);
 
-        const ctx = timelineElem.getContext("2d");
+        const ctx = timelineElem.getContext("2d")!;
         ctx.fillStyle = "black";
         ctx.fillRect(x - 1, y - timelineRowMargin, 3, timelineRowHeight);
     }
@@ -193,6 +194,8 @@ function main() {
     let timelineHandle = 0;
 
     function startTimeline() {
+        sendJson("start", null);
+
         clearTimeline();
 
         timelineStartTime = performance.now();
@@ -206,6 +209,7 @@ function main() {
     }
 
     function stopTimeline() {
+        sendJson("stop", null);
         cancelAnimationFrame(timelineHandle);
         timelineHandle = 0;
         timelineStartTime = NaN;
@@ -239,7 +243,7 @@ function main() {
 
         const [x, y] = getTimelineXY(timeMS);
 
-        const ctx = timelineElem.getContext("2d");
+        const ctx = timelineElem.getContext("2d")!;
         ctx.fillStyle = eventColor[kind] || "yellow";
         ctx.fillRect(x, y, 1, timelineRowHeight);
 
@@ -251,11 +255,14 @@ function main() {
     }
 
     function sendJson(action: string, payload: any) {
-        socket.send(JSON.stringify({ action, payload }));
+        socketWorker.postMessage({ action, payload });
     }
 
     function sendCanvasMousePos(kind: number, ev: MouseEvent) {
-        if (!socket || socket.readyState !== WebSocket.OPEN || ev.buttons === 0)
+        // if (!socket || socket.readyState !== WebSocket.OPEN || ev.buttons === 0)
+        //     return;
+
+        if (ev.buttons === 0)
             return;
 
         let { width, height, center, radius, spinDurationSec, spinSubdivisions } = frameSpec;
@@ -283,7 +290,7 @@ function main() {
         clock.width = width;
         clock.height = height;
 
-        let context = clock.getContext("2d");
+        let context = clock.getContext("2d")!;
 
         context.clearRect(0, 0, width, height);
 
@@ -320,10 +327,12 @@ function main() {
     }
 
     function counterRotate(degrees: number) {
-        [imageElem, canvasElem].forEach(e => {
-            e.style.transformOrigin = "50% 50%";
-            e.style.transform = `rotate3d(0,0,1, ${(-degrees).toFixed(4)}deg)`;
-        });
+        if (jankElem.checked) {
+            [imageElem, canvasElem].forEach(e => {
+                e.style.transformOrigin = "50% 50%";
+                e.style.transform = `rotate3d(0,0,1, ${(-degrees).toFixed(4)}deg)`;
+            });
+        }
     }
 
     function setupRenderElements() {
@@ -363,8 +372,7 @@ function main() {
             stopBtn.disabled = true;
             stopTimeline();
             stopRenderLoop();
-            socket.close();
-            connect();
+            sendJson("stop", null);
         };
 
         frameRect = frameElem.getBoundingClientRect();
@@ -383,7 +391,7 @@ function main() {
 
         sendJson("TICK", { frameTime, circleTime, frameId });
 
-        const context = canvasElem.getContext("2d");
+        const context = canvasElem.getContext("2d")!;
         context.save();
 
         let { width, height, center, radius } = frameSpec;
@@ -421,9 +429,7 @@ function main() {
 
             currentFrameId += 1;
 
-            if (socket.readyState === WebSocket.OPEN) {
-                renderLoopHandle = requestAnimationFrame(loop);
-            }
+            renderLoopHandle = requestAnimationFrame(loop);
         }
 
         renderLoopHandle = requestAnimationFrame(loop);
@@ -434,100 +440,97 @@ function main() {
         renderLoopHandle = 0;
     }
 
-    function connect() {
-        log("connecting");
-
-        let scheme = document.location.protocol === "https:" ? "wss" : "ws";
-        let port = document.location.port ? (":" + document.location.port) : "";
-        let url = scheme + "://" + document.location.hostname + port + "/renderer";
-        socket = new WebSocket(url);
-        socket.binaryType = "arraybuffer";
-
-        socket.onmessage = evt => {
-            if (typeof evt.data === "string") {
-                const { action, payload } = JSON.parse(evt.data);
-                switch (action) {
-                    case "READY":
-                        frameSpec = payload;
-                        setupRenderElements();
-                        break;
-                    case "STATS": {
-                        const frameId = payload.frameId;
-                        drawTimeEvent(EventKind.Dequeued, frameId);
-                        //if (stats.frameTime >= payload.frameTime) {
-                        //  log(`Frames out of order! ${payload.frameTime} arrived after ${stats.frameTime}!`);
-                        //}
-                        const stats = { ...payload, latency: performance.now() - payload.frameTime };
-
-                        let y = 10;
-                        let x = 10;
-
-                        const ctx = statsElem.getContext("2d");
-                        ctx.clearRect(0, 0, statsElem.width, statsElem.height);
-
-                        ctx.fillStyle = "black";
-
-                        for (const key in stats) {
-                            const line = `${(key as any).padStart(20)}: ${stats[key].toFixed(3).padStart(8, "0")}\n`;
-                            ctx.fillText(line, x, y);
-                            y += 12;
-                        }
-
-                        break;
-                    }
-                }
-            } else {
-                const buffer: ArrayBuffer = evt.data;
-                const imgView = new Uint8Array(buffer, 4);
-                const intView = new Int32Array(buffer, 0, 4);
-                const frameId = intView[0];
-
-                drawTimeEvent(EventKind.Response, frameId);
-
-                loadImageWithWorker(frameId, imgView).then(image => {
-                    drawTimeEvent(EventKind.Decoded, frameId);
-                    if (image) {
-                        if (frameId > imageFrameId) {
-                            const ctx = imageElem.getContext("2d");
-                            ctx.imageSmoothingEnabled = false;
-                            ctx.drawImage(image, 0, 0);
-                        }
-                        if ("close" in image) {
-                            image.close();
-                        }
-                    }
-                }, ({ frameId, error }) => {
-                    if (error) {
-                        console.error(`Failed to decode frame ${frameId}`, error);
-                        drawTimeEvent(EventKind.Failed, frameId);
-                    } else {
-                        drawTimeEvent(EventKind.Skipped, frameId);
-                    }
-                });
-            }
-        };
-        socket.onopen = evt => {
-            log("connected");
-        }
-        socket.onerror = evt => {
-            stopTimeline();
-            stopRenderLoop();
-            log("Socket error");
-        };
-        socket.onclose = () => {
-            stopTimeline();
-            stopRenderLoop();
-            log("disconnected");
-        };
-    }
-
     window.onresize = () => {
         frameRect = frameElem.getBoundingClientRect();
         resizeStats();
         clearTimeline();
     }
 
-    connect();
+    socketWorker.onmessage = evt => {
+        const { action, payload } = evt.data;
+        if (action) {
+            switch (action) {
+                case "onopen": {
+                    log("connected");
+                    break;
+                }
+
+                case "onerror": {
+                    stopTimeline();
+                    stopRenderLoop();
+                    log("Socket error");
+                    break;
+                }
+
+                case "onclose": {
+                    stopTimeline();
+                    stopRenderLoop();
+                    log("disconnected");
+                    break;
+                };
+
+                case "READY":
+                    frameSpec = payload;
+                    setupRenderElements();
+                    break;
+
+                case "STATS": {
+                    const frameId = payload.frameId;
+                    drawTimeEvent(EventKind.Dequeued, frameId);
+                    //if (stats.frameTime >= payload.frameTime) {
+                    //  log(`Frames out of order! ${payload.frameTime} arrived after ${stats.frameTime}!`);
+                    //}
+                    const stats = { ...payload, latency: performance.now() - payload.frameTime };
+
+                    let y = 10;
+                    let x = 10;
+
+                    const ctx = statsElem.getContext("2d")!
+                    ctx.clearRect(0, 0, statsElem.width, statsElem.height);
+
+                    ctx.fillStyle = "black";
+
+                    for (const key in stats) {
+                        const line = `${(key as any).padStart(20)}: ${stats[key].toFixed(3).padStart(8, "0")}\n`;
+                        ctx.fillText(line, x, y);
+                        y += 12;
+                    }
+
+                    break;
+                }
+            }
+        } else {
+            const buffer: ArrayBuffer = evt.data;
+            const imgView = new Uint8Array(buffer, 4);
+            const intView = new Int32Array(buffer, 0, 4);
+            const frameId = intView[0];
+
+            drawTimeEvent(EventKind.Response, frameId);
+
+            loadImageWithWorker(frameId, imgView).then(image => {
+                drawTimeEvent(EventKind.Decoded, frameId);
+                if (image) {
+                    if (frameId > imageFrameId) {
+                        const ctx = imageElem.getContext("2d")!;
+                        ctx.imageSmoothingEnabled = false;
+                        ctx.drawImage(image, 0, 0);
+                    }
+                    if ("close" in image) {
+                        image.close();
+                    }
+                }
+            }, ({ frameId, error }) => {
+                if (error) {
+                    console.error(`Failed to decode frame ${frameId}`, error);
+                    drawTimeEvent(EventKind.Failed, frameId);
+                } else {
+                    drawTimeEvent(EventKind.Skipped, frameId);
+                }
+            });
+        }
+    };
+
+
     clearTimeline();
     resizeStats();
 }

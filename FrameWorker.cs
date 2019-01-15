@@ -207,44 +207,20 @@ namespace MotionJpegLatencyTest
                 gfx.Restore(state);
             }
 
-
             var transform = gfx.Transform;
-
-            //for (int i = 0; i < spinSubdivisions; ++i)
-            //{
-            //    if (i % 5 != 0)
-            //    {
-            //        gfx.Transform = transform;
-            //        gfx.RotateTransform(i * 360.0f / spinSubdivisions);
-            //        gfx.FillRectangle(Brushes.DimGray, center, -1, radius, 2);
-            //    }
-            //}
-
-            //for (int i = 0; i < spinSubdivisions; ++i)
-            //{
-            //    if (i % 5 == 0)
-            //    {
-            //        gfx.Transform = transform;
-            //        gfx.RotateTransform(i * 360.0f / spinSubdivisions);
-            //        gfx.FillRectangle(Brushes.Gray, center, -2, radius, 4);
-            //    }
-            //}
-
-            //for (int i = 0; i < spinDurationSec; ++i)
-            //{
-            //    gfx.Transform = transform;
-            //    gfx.RotateTransform(i * 360.0f / spinDurationSec);
-            //    gfx.FillRectangle(Brushes.DarkGray, center, -2, radius, 4);
-            //}
 
             gfx.Transform = transform;
             gfx.FillRectangle(Brushes.Black, center, -5, radius, 10);
 
-            //gfx.DrawString(
-            //    $"FPS={frameRate:000.0}, {bandWidth:0000.00}megabit/sec render={renderDuration.TotalMilliseconds:0000.0}ms",
-            //    font, Brushes.Yellow, -center - radius, 10);
-
             _stats.AddRenderDuration(sw.Elapsed);
+
+            gfx.ResetTransform();
+
+            // Draw a bouncing ball
+            const float ballRadius = 20;
+            gfx.FillEllipse(Brushes.Orange,
+             width*0.5f - ballRadius, height - (height - 2*ballRadius) * (float)Math.Abs(Math.Sin((float)(frameTimeMs/1000f))),
+             ballRadius*2, ballRadius*2);
         }
 
         public void PostRequest(FrameRequest request)
