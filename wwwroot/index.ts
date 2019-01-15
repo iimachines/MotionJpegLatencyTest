@@ -74,7 +74,8 @@ function main() {
 
     const imageDecodingWorkers = [...Array(3)].map(createImageDecoder);
 
-    function loadImageWithWorker(frameId: number, imageView: Uint8Array): Promise<HTMLImageElement> {
+    function loadImageWithWorker(frameId: number, imageView: Uint8Array):
+        Promise<HTMLImageElement|ImageBitmap> {
         const decoder = imageDecodingWorkers.filter(isDecoderReady)[0];
 
         return new Promise((resolve, reject) => {
@@ -485,10 +486,15 @@ function main() {
 
                 loadImageWithWorker(frameId, imgView).then(image => {
                     drawTimeEvent(EventKind.Decoded, frameId);
-                    if (image && frameId > imageFrameId) {
-                        const ctx = imageElem.getContext("2d");
-                        ctx.imageSmoothingEnabled = false;
-                        ctx.drawImage(image, 0, 0);
+                    if (image) {
+                        if (frameId > imageFrameId) {
+                            const ctx = imageElem.getContext("2d");
+                            ctx.imageSmoothingEnabled = false;
+                            ctx.drawImage(image, 0, 0);
+                        }
+                        if ("close" in image) {
+                            image.close();
+                        }
                     }
                 }, ({ frameId, error }) => {
                     if (error) {
