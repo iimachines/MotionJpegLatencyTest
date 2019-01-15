@@ -5,6 +5,8 @@ A quick and dirty experiment to see if it is possible to have low-latency JPEG s
 
 * Should run on any platform, but only tested on Windows
 
+  * It seems that on MacOS and Linux, you will need to install [libgdiplus](https://github.com/mono/libgdiplus)
+
 * Install [.NET Core 2.1](https://dotnet.microsoft.com/download/dotnet-core/2.1)
 
 * `cd` into the cloned folder 
