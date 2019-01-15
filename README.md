@@ -36,11 +36,12 @@ A quick and dirty experiment to see if it is possible to have low-latency JPEG s
 
 When running this on a fast PC without any network, one would expect very low latency.
 
-Indeed, running this with Microsoft EDGE on my Windows 10 PC, hardly any latency is noticed. Firefox has a bit of latency
+Indeed, running this with Microsoft EDGE on my Windows 10 PC, hardly any latency is noticed. Firefox has a bit of latency. In the timeline one can observe that the render requests (gray bars) are immediately processed by the server after the requests are send from the client (green bars). 
 
-However, when using Google Chrome <sub><sup>(I tested 71.0.3578.98 and 73.0.3672.0)</sup></sub>, strange stuff happens, and latency varies greatly. In the timeline one can observe that the server receives the render requests **way to late**, while these are just very small websocket messages. It is as if Chrome is queuing the messages. Note that when not transmitting the image from the server, no delay is noticed in the timeline, as if Chrome's websocket is not full-duplex.
+However, when using Google Chrome <sub><sup>(I tested 71.0.3578.98 and 73.0.3672.0)</sup></sub>, latency is higher, and strange stuff is observed in the timeline... Notice how the server receives (gray bar) render requests **way to late**, while these are just very small websocket messages. It is as if Chrome is queuing the messages. Note that when not transmitting the image from the server, no delay is noticed in the timeline, as if Chrome's websocket is not full-duplex.
 
 This might be related to this [Chromium bug](https://bugs.chromium.org/p/chromium/issues/detail?id=692257&q=websocket%20delay&colspec=ID%20Pri%20M%20Stars%20ReleaseBlock%20Component%20Status%20Owner%20Summary%20OS%20Modified)
 
+Or this might be a  bug in this *very quick and dirty rough around the edges* experiment ;-)
 
-
+Nevertheless the different browser behavior is weird.
