@@ -45,3 +45,18 @@ This might be related to this [Chromium bug](https://bugs.chromium.org/p/chromiu
 Or this might be a  bug in this *very quick and dirty rough around the edges* experiment ;-)
 
 Nevertheless the different browser behavior is weird.
+
+# UPDATE
+
+After ricea@chromium.org commented on the issue, I did some profiling, and it turned out Chrome decodes images on the main UI thread, blocking the websocket message.
+
+I did not yet put the websocket on a web-worker as was suggested, instead I used `createImageBitmap` on multiple web-workers to decode and transfer the image back to the main thread.
+
+This significantly improves the delay and latency of this experiment on Chrome, but after a while Chrome crashes with "aw snap" (most likely because the experiment now creates 60 image bitmaps per second, but that is just a guess).
+
+
+
+
+
+
+

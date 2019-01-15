@@ -29,10 +29,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="wwwroot\index.ts" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Quamotion.TurboJpegWrapper" Version="1.5.9" />
     <PackageReference Include="System.Drawing.Common" Version="4.5.1" />
-    <PackageReference Include="Microsoft.TypeScript.MSBuild" Version="3.2.3"/>
+    <PackageReference Include="Microsoft.TypeScript.MSBuild" Version="3.2.3" />
   </ItemGroup>
 
   <ItemGroup>
@@ -40,11 +44,11 @@
   </ItemGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
-    <TypeScriptTarget>ES5</TypeScriptTarget>
+    <TypeScriptTarget>ES2016</TypeScriptTarget>
     <TypeScriptJSXEmit>None</TypeScriptJSXEmit>
     <TypeScriptModuleKind>None</TypeScriptModuleKind>
     <TypeScriptCompileOnSaveEnabled>True</TypeScriptCompileOnSaveEnabled>
-    <TypeScriptNoImplicitAny>False</TypeScriptNoImplicitAny>
+    <TypeScriptNoImplicitAny>True</TypeScriptNoImplicitAny>
     <TypeScriptRemoveComments>False</TypeScriptRemoveComments>
     <TypeScriptOutFile />
     <TypeScriptOutDir />
