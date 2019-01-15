@@ -1,0 +1,61 @@
+body {
+  overflow: hidden;
+}
+
+#frame {
+  position: relative;
+  overflow: hidden;
+}
+
+#image, #canvas, #clock {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+#clock {
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+#panels {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+}
+
+#logs {
+  display: flex;
+  flex-direction: column;
+  width: 25vw;
+  height: 80vh;
+}
+
+#log {
+  flex: 1;
+  overflow: scroll;
+  background: papayawhip;
+  border: 2px solid dimgray;
+}
+
+#stats {
+  flex: none;
+  display: block;
+  height: 200px;
+  background: papayawhip;
+  border: 2px solid dimgray;
+}
+
+#buttons {
+  display: flex;
+  flex-direction: row;
+}
+
+code {
+  display: block;
+  white-space: pre-wrap;
+}
+
+#timeline {
+  width: 100%;
+}

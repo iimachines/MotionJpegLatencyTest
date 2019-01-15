@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+  <title>WonderMedia motion-JPEG latency tester</title>
+  <script src="index.js"></script>
+  <link rel="stylesheet" type="text/css" href="index.css">
+</head>
+
+<body>
+  <canvas id="timeline"></canvas>
+  <div id="panels">
+    <div id="logs">
+      <div id="buttons">
+        <button id="button-anim" disabled>Test animation-frame</button>
+        <button id="button-mouse" disabled>Test mouse-events</button>
+        <button id="button-stop" disabled>Stop</button>
+      </div>
+      <code id="stats"></code>
+      <div id="log"></div>
+    </div>
+    <div id="frame">
+      <canvas id="image" class="image"></canvas>
+      <canvas id="canvas"></canvas>
+      <canvas id="clock"></canvas>
+    </div>
+  </div>
+</body>
+
+</html>
