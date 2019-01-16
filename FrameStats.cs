@@ -1,34 +1,38 @@
-using System;
-
 namespace MotionJpegLatencyTest
 {
     public class FrameStats
     {
+        private FrameHeader _header;
+
         private double _frameRateWindowTimeMs;
         private int _frameCount;
         private long _byteCount;
 
-        private TimeSpan _renderDurations;
-        private TimeSpan _compressDuration;
-        private TimeSpan _transmitDuration;
-        private TimeSpan _frameDuration;
+        private Duration _renderDurations;
+        private Duration _compressDuration;
+        private Duration _transmitDuration;
+        private Duration _frameDuration;
 
-        public void Update(double frameTimeMs)
+        public FrameHeader Update(long frameId, Duration frameTime)
         {
             lock (this)
             {
+                var frameTimeMs = frameTime.TotalMilliseconds;
+
+                _header.FrameId = frameId;
+                _header.FrameTime = frameTimeMs;
+
                 if (++_frameCount == 30)
                 {
                     var dt = (frameTimeMs - _frameRateWindowTimeMs) / 1000.0;
-                    FrameRate = _frameCount / dt;
-                    BandWidth = (_byteCount / dt) * 10 / 1e6; // roughly estimate 10 bits per byte for transmission
-
                     double fc = _frameCount;
 
-                    RenderDuration = _renderDurations.TotalMilliseconds / fc;
-                    CompressDuration = _compressDuration.TotalMilliseconds / fc;
-                    TransmitDuration = _transmitDuration.TotalMilliseconds / fc;
-                    FrameDuration = _frameDuration.TotalMilliseconds / fc;
+                    _header.FrameRate = _frameCount / dt;
+                    _header.BandWidth = (_byteCount / dt) * 10 / 1e6; // roughly estimate 10 bits per byte for transmission
+                    _header.RenderDuration = _renderDurations.TotalMilliseconds / fc;
+                    _header.CompressDuration = _compressDuration.TotalMilliseconds / fc;
+                    _header.TransmitDuration = _transmitDuration.TotalMilliseconds / fc;
+                    _header.FrameDuration = _frameDuration.TotalMilliseconds / fc;
 
                     _frameDuration = _renderDurations = _compressDuration = _transmitDuration = default;
 
@@ -37,19 +41,11 @@ namespace MotionJpegLatencyTest
                     _byteCount = 0;
                 }
 
+                return _header;
             }
         }
 
-        public double FrameRate { get; private set; }
-
-        public double BandWidth { get; private set; }
-
-        public double RenderDuration { get; private set; }
-        public double CompressDuration { get; private set; }
-        public double TransmitDuration { get; private set; }
-        public double FrameDuration { get; private set; }
-
-        private void Add(ref TimeSpan field, in TimeSpan value)
+        private void Add(ref Duration field, in Duration value)
         {
             lock (this)
             {
@@ -65,9 +61,9 @@ namespace MotionJpegLatencyTest
             }
         }
 
-        public void AddRenderDuration(in TimeSpan ts) => Add(ref _renderDurations, ts);
-        public void AddCompressDuration (in TimeSpan ts) => Add(ref _compressDuration, ts);
-        public void AddTransmitDuration(in TimeSpan ts) => Add(ref _transmitDuration, ts);
-        public void AddFrameDuration(in TimeSpan ts) => Add(ref _frameDuration, ts);
+        public void AddRenderDuration(in Duration ts) => Add(ref _renderDurations, ts);
+        public void AddCompressDuration(in Duration ts) => Add(ref _compressDuration, ts);
+        public void AddTransmitDuration(in Duration ts) => Add(ref _transmitDuration, ts);
+        public void AddFrameDuration(in Duration ts) => Add(ref _frameDuration, ts);
     }
 }

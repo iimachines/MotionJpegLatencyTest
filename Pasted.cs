@@ -1,5 +1,5 @@
 ﻿/*
-var nextFrameTime = TimeSpan.FromSeconds(sendingFrameIndex * 1.0 / framesPerSecond);
+var nextFrameTime = Duration.FromSeconds(sendingFrameIndex * 1.0 / framesPerSecond);
 
 if (timelineStopwatch.Elapsed >= nextFrameTime)
 {

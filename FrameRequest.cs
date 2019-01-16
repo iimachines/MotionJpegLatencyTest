@@ -6,15 +6,15 @@ namespace MotionJpegLatencyTest
     public sealed class FrameRequest
     {
         public readonly int FrameId;
-        public readonly TimeSpan FrameTime;
-        public readonly TimeSpan CircleTime;
+        public readonly Duration FrameTime;
+        public readonly Duration CircleTime;
         public readonly FrameRequest PreviousFrameRequest;
 
         public readonly EventWaitHandle Rendered;
         public readonly EventWaitHandle Compressed;
         public readonly EventWaitHandle Transmitted;
 
-        public FrameRequest(int frameId, TimeSpan frameTime, TimeSpan circleTime, FrameRequest previousFrameRequest)
+        public FrameRequest(int frameId, Duration frameTime, Duration circleTime, FrameRequest previousFrameRequest)
         {
             FrameId = frameId;
             FrameTime = frameTime;
@@ -35,8 +35,8 @@ namespace MotionJpegLatencyTest
         private FrameRequest()
         {
             FrameId = -1;
-            FrameTime = TimeSpan.MinValue;
-            CircleTime = TimeSpan.MinValue;
+            FrameTime = Duration.MinValue;
+            CircleTime = Duration.MinValue;
             Rendered = new ManualResetEvent(true);
             Compressed = new ManualResetEvent(true);
             Transmitted = new ManualResetEvent(true);

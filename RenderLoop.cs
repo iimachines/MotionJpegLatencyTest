@@ -83,8 +83,8 @@ namespace MotionJpegLatencyTest
                                     {
                                         var request = new FrameRequest(
                                             frameId,
-                                            TimeSpan.FromMilliseconds(frameTimeMS),
-                                            TimeSpan.FromMilliseconds(circleTimeMs),
+                                            Duration.FromMilliseconds(frameTimeMS),
+                                            Duration.FromMilliseconds(circleTimeMs),
                                             requests[(workerCount + workerIndex - 1) % workerCount]);
 
                                         worker.PostRequest(request);

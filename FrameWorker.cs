@@ -26,6 +26,9 @@ namespace MotionJpegLatencyTest
         private byte[] _compressionBuffer;
         private byte[] _sendBuffer = new byte[4096];
 
+        // This should always be zero when sending!
+        private volatile int _concurrentSendCount;
+
         public FrameWorker(FrameSpec spec, string backgroundPath, JpegCompressor jpegCompressor, FrameStats stats, WebSocket webSocket, CancellationToken cancellation)
         {
             _spec = spec;
@@ -34,7 +37,7 @@ namespace MotionJpegLatencyTest
             _jpegCompressor = jpegCompressor;
             _webSocket = webSocket;
             _cancellation = cancellation;
-            _thread = new Thread(ThreadEntry);
+            _thread = new Thread(ThreadEntry) {Priority = ThreadPriority.AboveNormal};
             _thread.Start();
         }
 
@@ -54,18 +57,6 @@ namespace MotionJpegLatencyTest
 
                         while (_requests.TryDequeue(out var current))
                         {
-                            var statsTask = _webSocket.SendJsonAsync("STATS", new
-                            {
-                                frameTime = current.FrameTime.TotalMilliseconds,
-                                frameId = current.FrameId,
-                                _stats.BandWidth,
-                                _stats.FrameRate,
-                                _stats.RenderDuration,
-                                _stats.CompressDuration,
-                                _stats.TransmitDuration,
-                                _stats.FrameDuration
-                            }, _cancellation);
-
                             sw.Restart();
 
                             var previous = current.PreviousFrameRequest ?? FrameRequest.Completed;
@@ -82,7 +73,7 @@ namespace MotionJpegLatencyTest
 
                             //previous.Compressed.WaitOne();
 
-                            var compressedSize = Compress(current.FrameId, canvas, jpegFrame, ref _compressionBuffer);
+                            var compressedSize = Compress(current, canvas, jpegFrame, ref _compressionBuffer);
 
                             DebugWriteLine($"JPEG {frameTimeMs:00000.0}ms");
 
@@ -92,8 +83,6 @@ namespace MotionJpegLatencyTest
                             previous.Transmitted.WaitOne();
 
                             DebugWriteLine($"SEND {frameTimeMs:00000.0}ms");
-
-                            await statsTask;
 
                             await Transmit(current.FrameId, current.FrameTime, _compressionBuffer, compressedSize);
 
@@ -130,10 +119,15 @@ namespace MotionJpegLatencyTest
             _thread.Join();
         }
 
-        private async Task Transmit(int frameId, TimeSpan frameTime, byte[] compressionBuffer, int compressedSize)
+        private async Task Transmit(int frameId, Duration frameTime, byte[] compressionBuffer, int compressedSize)
         {
-            var sw = new Stopwatch();
-            sw.Start();
+            if (Interlocked.Increment(ref _concurrentSendCount) != 1) 
+                throw new InvalidOperationException("Multiple threads trying to send to the websocket at once!");
+
+            try
+            {
+                var sw = new Stopwatch();
+                sw.Start();
 
 #if false
             var blockSize = _sendBuffer.Length;
@@ -147,33 +141,41 @@ namespace MotionJpegLatencyTest
                     WebSocketMessageType.Binary, isLast, _cancellation);
             }
 #else
-            await _webSocket.SendAsync(
-                new ArraySegment<byte>(compressionBuffer, 0, compressedSize),
-                WebSocketMessageType.Binary, true, _cancellation);
+                await _webSocket.SendAsync(
+                    new ArraySegment<byte>(compressionBuffer, 0, compressedSize),
+                    WebSocketMessageType.Binary, true, _cancellation);
 
 #endif
 
-            _stats.AddTransmitDuration(sw.Elapsed);
+                _stats.AddTransmitDuration(sw.Elapsed);
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _concurrentSendCount);
+            }
         }
 
-        private int Compress(int frameId, Bitmap canvas, JpegFrame frame, ref byte[] compressionBuffer)
+        private int Compress(FrameRequest request, Bitmap canvas, JpegFrame frame, ref byte[] compressionBuffer)
         {
             var sw = new Stopwatch();
             sw.Start();
 
-            var imageOffset = 4;
+            var imageOffset = FrameHeader.MessageSize;
 
             int compressedSize = frame.Compress(ref compressionBuffer, imageOffset, canvas, 90);
 
-            var span = MemoryMarshal.Cast<byte, int>(new Span<byte>(compressionBuffer, 0, imageOffset));
-            span[0] = frameId;
-
             _stats.AddCompressedSize(compressedSize + imageOffset);
             _stats.AddCompressDuration(sw.Elapsed);
+
+            var span = MemoryMarshal.Cast<byte, FrameHeader>
+                (new Span<byte>(compressionBuffer, 0, imageOffset));
+
+            span[0] = _stats.Update(request.FrameId, request.FrameTime);
+
             return compressedSize + imageOffset;
         }
 
-        private void Render(Graphics gfx, TimeSpan frameTime, TimeSpan circleTime)
+        private void Render(Graphics gfx, Duration frameTime, Duration circleTime)
         {
             var frameTimeMs = frameTime.TotalMilliseconds;
 
@@ -184,8 +186,6 @@ namespace MotionJpegLatencyTest
             var height = _spec.Height;
             var radius = _spec.Radius;
             var center = _spec.Center;
-
-            _stats.Update(frameTimeMs);
 
             gfx.ResetTransform();
 
