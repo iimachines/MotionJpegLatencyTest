@@ -60,10 +60,15 @@ This significantly improves the delay and latency of this experiment on Chrome, 
 
 The crash above is indeed caused by leaking memory. It turns out that explicitly calling `close` on the image bitmap fixes the leak, Chrome is not garbage collecting the bitmap images...
  
+# UPDATE 3
 
+The latest commits don't work on EDGE anymore, for simplicity (EDGE was super fast in the first commit anyway, so all the other tricks were not needed). 
 
+Each frame is now split into 4 segments, and each segment is encoded/decoded on different threads/workers, and transmitted as soon as possible, in any order. This allows 1920x1080 with ~16ms latency on a fast LAN and at least quad-core PCs, but janking still happens occasionally, so not really usable. Furthermore the browser always seems to wait for the VSYNC before presenting the canvas, so the total visual latency is about 32ms for full-HD resolution. 
 
+WebRTC is of course a lot better for this, but not that easy to implement on the server side, and it remains to be seen if a lower latency can be achived with WebRTC. Websockets use TCP, so are not perfect at all for this one-way experiment.
 
+Note that when implementing this in C/C++, one would interleave the encoding, sending, receiving, and decoding, completely hiding any compression latency. Unfortunately this would require a web-assembly JPEG decoder, and for that to be fast, WASM should support SIMD.
 
-
+As a future experiment, looking in JPEG-XS would be interesting.
 
