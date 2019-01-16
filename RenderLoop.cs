@@ -39,6 +39,7 @@ namespace MotionJpegLatencyTest
                 await webSocket.SendJsonAsync("READY", frameSpec, cancellation);
 
                 double lastFrameTimeMS = -1;
+                int lastFrameId = -1;
 
                 // Start render loop
                 while (!cancellation.IsCancellationRequested && !webSocket.CloseStatus.HasValue) // && lastFrameTimeMS < 250)
@@ -50,48 +51,57 @@ namespace MotionJpegLatencyTest
                     switch (message["action"].Value<string>())
                     {
                         case "MOUSE":
-                        {
-                            var k = message.SelectToken("payload.kind").Value<int>();
-                            var x = message.SelectToken("payload.posX").Value<double>();
-                            var y = message.SelectToken("payload.posY").Value<double>();
-                            Console.WriteLine($"Mouse {k} {x} {y}");
-                            break;
-                        }
+                            {
+                                var k = message.SelectToken("payload.kind").Value<int>();
+                                var x = message.SelectToken("payload.posX").Value<double>();
+                                var y = message.SelectToken("payload.posY").Value<double>();
+                                Console.WriteLine($"Mouse {k} {x} {y}");
+                                break;
+                            }
                         case "TICK":
-                        {
-                            var frameId = message.SelectToken("payload.frameId").Value<int>();
-                            var frameTimeMS = message.SelectToken("payload.frameTime").Value<double>();
-                            var circleTimeMs = message.SelectToken("payload.circleTime").Value<double>();
-
-                            if (frameTimeMS <= lastFrameTimeMS)
                             {
-                                Console.WriteLine($"Error: incoming frames out of order, {frameTimeMS:0000.0}ms after {lastFrameTimeMS:0000.0}ms");
+                                var frameId = message.SelectToken("payload.frameId").Value<int>();
+                                var frameTimeMS = message.SelectToken("payload.frameTime").Value<double>();
+                                var circleTimeMs = message.SelectToken("payload.circleTime").Value<double>();
+
+                                if (frameTimeMS == lastFrameTimeMS)
+                                {
+                                    Console.WriteLine($"Error: received same incoming frame twice, {frameTimeMS:0000.00}ms#{frameId} after {lastFrameTimeMS:0000.00}ms#{lastFrameId}");
+                                }
+                                else if (frameTimeMS < lastFrameTimeMS)
+                                {
+                                    Console.WriteLine($"Error: received on older incoming frame, {frameTimeMS:0000.00}ms#{frameId} after {lastFrameTimeMS:0000.00}ms#{lastFrameId}");
+                                }
+                                else
+                                {
+                                    lastFrameTimeMS = frameTimeMS;
+                                    lastFrameId = frameId;
+
+                                    var worker = workers[workerIndex];
+
+                                    if (worker.IsCompleted)
+                                    {
+                                        var request = new FrameRequest(
+                                            frameId,
+                                            TimeSpan.FromMilliseconds(frameTimeMS),
+                                            TimeSpan.FromMilliseconds(circleTimeMs),
+                                            requests[(workerCount + workerIndex - 1) % workerCount]);
+
+                                        worker.PostRequest(request);
+
+                                        requests[workerIndex] = request;
+
+                                        workerIndex = (workerIndex + 1) % workerCount;
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine($"Skipping frame {frameTimeMS:0000.0}!");
+                                    }
+
+                                }
+
+                                break;
                             }
-
-                            lastFrameTimeMS = frameTimeMS;
-
-                            var worker = workers[workerIndex];
-
-                            if (worker.IsCompleted)
-                            {
-                                var request = new FrameRequest(
-                                    frameId,
-                                    TimeSpan.FromMilliseconds(frameTimeMS),
-                                    TimeSpan.FromMilliseconds(circleTimeMs),
-                                    requests[(workerCount + workerIndex - 1) % workerCount]);
-
-                                worker.PostRequest(request);
-
-                                requests[workerIndex] = request;
-
-                                workerIndex = (workerIndex + 1) % workerCount;
-                            }
-                            else
-                            {
-                                Console.WriteLine($"Skipping frame {frameTimeMS:0000.0}!");
-                            }
-                            break;
-                        }
                     }
                 }
 

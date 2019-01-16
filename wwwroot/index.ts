@@ -38,6 +38,7 @@ function main() {
     let timelineHeight = 0;
 
     let currentFrameId = 0;
+    let currentFrameTime = -1;
     let imageFrameId = -1;
 
     function timelineRowY(row: number) {
@@ -194,6 +195,10 @@ function main() {
     let timelineHandle = 0;
 
     function startTimeline() {
+        animBtn.disabled = true;
+        mouseBtn.disabled = true;
+        stopBtn.disabled = false;
+
         sendJson("start", null);
 
         clearTimeline();
@@ -209,11 +214,16 @@ function main() {
     }
 
     function stopTimeline() {
+        animBtn.disabled = false;
+        mouseBtn.disabled = false;
+        stopBtn.disabled = true;
+
         sendJson("stop", null);
         cancelAnimationFrame(timelineHandle);
         timelineHandle = 0;
         timelineStartTime = NaN;
         currentFrameId = 0;
+        currentFrameTime = -1;
         imageFrameId = -1;
     }
 
@@ -276,9 +286,7 @@ function main() {
 
         const circleTime = 1000 * radians * spinDurationSec / (Math.PI * 2);
 
-        sendFrameTime(currentFrameId, performance.now(), circleTime);
-
-        currentFrameId += 1;
+        advanceFrameTime(currentFrameId, performance.now(), circleTime);
 
         // sendJson("MOUSE", { kind, posX, posY })
     }
@@ -347,29 +355,21 @@ function main() {
 
         animBtn.disabled = false;
         mouseBtn.disabled = false;
+        stopBtn.disabled = true;
 
         animBtn.onclick = () => {
-            animBtn.disabled = true;
-            mouseBtn.disabled = true;
-            stopBtn.disabled = false;
             startTimeline();
             startRenderLoop();
         };
 
         mouseBtn.onclick = () => {
             startTimeline();
-            animBtn.disabled = true;
-            mouseBtn.disabled = true;
-            stopBtn.disabled = false;
             canvasElem.onmousedown = (ev) => sendCanvasMousePos(1, ev);
             canvasElem.onmousemove = (ev) => sendCanvasMousePos(0, ev);
             canvasElem.onmouseup = (ev) => sendCanvasMousePos(-1, ev);
         };
 
         stopBtn.onclick = () => {
-            animBtn.disabled = true;
-            mouseBtn.disabled = true;
-            stopBtn.disabled = true;
             stopTimeline();
             stopRenderLoop();
             sendJson("stop", null);
@@ -384,7 +384,15 @@ function main() {
         return (frameTime * 0.360 / frameSpec.spinDurationSec) % 360;
     }
 
-    function sendFrameTime(frameId: number, frameTime: number, circleTime: number): number {
+    function advanceFrameTime(frameId: number, frameTime: number, circleTime: number): number | null {
+        // In some browsers, performance.now() has ms precision (Spectre mitigation?)
+        // And it seems more than one mouse event can occur within the same ms.
+        if (currentFrameTime >= frameTime)
+            return null;
+
+        currentFrameTime = frameTime;
+        currentFrameId += 1;
+
         drawTimeEvent(EventKind.Request, frameId, frameTime);
 
         // console.log(`OUT: ${frameId} ${performance.now() | 0}ms`);
@@ -420,15 +428,16 @@ function main() {
 
     let renderLoopHandle = 0;
 
+    const renderLoopSampleEvery = 1;
+
     function startRenderLoop() {
         function loop(frameTime: number) {
-            //if ((currentFrameId & 1) === 0) {
-            const degrees = sendFrameTime(currentFrameId, frameTime, frameTime);
-            counterRotate(degrees);
-            //}
-
-            currentFrameId += 1;
-
+            if ((currentFrameId % renderLoopSampleEvery) === 0) {
+                const degrees = advanceFrameTime(currentFrameId, frameTime, frameTime);
+                if (degrees) {
+                    counterRotate(degrees);
+                }
+            }
             renderLoopHandle = requestAnimationFrame(loop);
         }
 
