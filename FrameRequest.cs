@@ -10,9 +10,9 @@ namespace MotionJpegLatencyTest
         public readonly Duration CircleTime;
         public readonly FrameRequest PreviousFrameRequest;
 
-        public readonly EventWaitHandle Rendered;
-        public readonly EventWaitHandle Compressed;
-        public readonly EventWaitHandle Transmitted;
+        public readonly ManualResetEvent Rendered;
+        public readonly ManualResetEvent Compressed;
+        public readonly ManualResetEvent Transmitted;
 
         public FrameRequest(int frameId, Duration frameTime, Duration circleTime, FrameRequest previousFrameRequest)
         {
@@ -20,9 +20,9 @@ namespace MotionJpegLatencyTest
             FrameTime = frameTime;
             CircleTime = circleTime;
             PreviousFrameRequest = previousFrameRequest;
-            Rendered = new AutoResetEvent(false);
-            Compressed = new AutoResetEvent(false);
-            Transmitted = new AutoResetEvent(false);
+            Rendered = new ManualResetEvent(false);
+            Compressed = new ManualResetEvent(false);
+            Transmitted = new ManualResetEvent(false);
         }
 
         public void SetAll()

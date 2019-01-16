@@ -10,22 +10,22 @@ namespace MotionJpegLatencyTest
     {
         private JpegCompressor _compressor;
 
-        public readonly int MaxWidth;
-        public readonly int MaxHeight;
+        public readonly int Width;
+        public readonly int Height;
         public readonly int MaxBufferSize;
 
         public readonly TJSubsamplingOptions SubSampling;
 
-        public JpegFrame(JpegCompressor compressor, int maxWidth, int maxHeight, TJSubsamplingOptions subSampling)
+        public JpegFrame(JpegCompressor compressor, int width, int height, TJSubsamplingOptions subSampling)
         {
             _compressor = compressor;
 
             checked
             {
-                MaxWidth = maxWidth;
-                MaxHeight = maxHeight;
+                Width = width;
+                Height = height;
                 SubSampling = subSampling;
-                MaxBufferSize = (int)JpegLibrary.tjBufSize(maxWidth, maxHeight, (int)subSampling);
+                MaxBufferSize = (int)JpegLibrary.tjBufSize(width, height, (int)subSampling);
             }
 
             var bufferHandle = JpegLibrary.tjAlloc(MaxBufferSize);
@@ -33,7 +33,7 @@ namespace MotionJpegLatencyTest
             if (bufferHandle == IntPtr.Zero)
             {
                 throw new OutOfMemoryException(
-                    $"Failed to allocate TurboJPEG buffer of size {maxWidth}x{maxHeight}, subSampling {subSampling}");
+                    $"Failed to allocate TurboJPEG buffer of size {width}x{height}, subSampling {subSampling}");
             }
 
             SetResourceHandle(bufferHandle);

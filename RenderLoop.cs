@@ -9,25 +9,24 @@ namespace MotionJpegLatencyTest
 {
     public class RenderLoop
     {
-        public static async Task Run(WebSocket webSocket, CancellationToken cancellation)
+        public static async Task Run(WebSocket webSocket)
         {
-            var scaleNom = 2;
-            var scaleDen = 3;
-            var width = (1920 * scaleNom / scaleDen) | 0;
-            var height = (1080 * scaleNom / scaleDen) | 0;
+            var scaleNom = 1;
+            var scaleDen = 1;
+            var width = (1280 * scaleNom / scaleDen) | 0;
+            var height = (720 * scaleNom / scaleDen) | 0;
             var frameSpec = new FrameSpec(width, height, 1);
 
             using (var jpegCompressor = new JpegCompressor())
             {
-                // Render, compress, transmit
-                const int workerCount = 3;
+                const int workerCount = 2;
 
                 var receiveBuffer = new byte[1024 * 4];
 
                 var stats = new FrameStats();
 
                 var workers = Enumerable.Range(0, workerCount)
-                    .Select(index => new FrameWorker(frameSpec, "background-small.jpg", jpegCompressor, stats, webSocket, cancellation))
+                    .Select(index => new FrameWorker(frameSpec, "background-small.jpg", jpegCompressor, stats, webSocket))
                     .ToArray();
 
                 var requests = Enumerable.Repeat(FrameRequest.Completed, workerCount)
@@ -36,15 +35,15 @@ namespace MotionJpegLatencyTest
                 int workerIndex = 0;
 
                 // Ready to start
-                await webSocket.SendJsonAsync("READY", frameSpec, cancellation);
+                await webSocket.SendJsonAsync("READY", frameSpec);
 
                 double lastFrameTimeMS = -1;
                 int lastFrameId = -1;
 
                 // Start render loop
-                while (!cancellation.IsCancellationRequested && !webSocket.CloseStatus.HasValue) // && lastFrameTimeMS < 250)
+                while (!webSocket.CloseStatus.HasValue) // && lastFrameTimeMS < 250)
                 {
-                    var message = await webSocket.ReceiveJsonAsync(cancellation, receiveBuffer);
+                    var message = await webSocket.ReceiveJsonAsync(default, receiveBuffer);
                     if (message == null)
                         break;
 

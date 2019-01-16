@@ -2,7 +2,7 @@ interface WithFrameId {
     frameId: number;
 }
 
-interface FrameHeader extends WithFrameId {
+interface SegmentHeader extends WithFrameId {
     frameTime: number;
     bandWidth: number;
     frameRate: number;
@@ -10,11 +10,32 @@ interface FrameHeader extends WithFrameId {
     transmitDuration: number;
     compressDuration: number;
     frameDuration: number;
+    segmentX: number;
+    segmentY: number;
+}
+
+interface DecodedSegment {
+    header: SegmentHeader;
+    image: ImageBitmap;
+}
+
+interface JitterBuffer {
+    frameId: number;
+    isFailed: boolean;
+    pending: number;
+    segments: DecodedSegment[];
+}
+
+interface EncodedEntry {
+    frameId: number;
+    bytes: Uint8Array;
+    header: SegmentHeader;
 }
 
 namespace SocketThread {
 
     const worker: Worker = self as any;
+    const segmentCount = 4;
 
     let socket: (WebSocket & { bufferedAmount?: number }) | null = null;
 
@@ -37,30 +58,75 @@ namespace SocketThread {
         return !d.onmessage;
     }
 
-    const imageDecodingWorkers = [...Array(3)].map(createImageDecoder);
+    const imageDecodingWorkers = [...Array(segmentCount)].map(createImageDecoder);
 
-    function loadImageWithWorker(frameId: number, imageView: Uint8Array): Promise<ImageBitmap> {
+    const jitterBuffers: Record<number, JitterBuffer> = {};
+
+    function getJitterBuffer(frameId: number) {
+        return jitterBuffers[frameId] || (jitterBuffers[frameId] = { frameId, isFailed: false, pending: segmentCount, segments: [] });
+    }
+
+    function onSegmentReceived(frameId: number) {
+        const jb = getJitterBuffer(frameId);
+        jb.pending -= 1;
+        if (jb.pending === 0) {
+            delete jitterBuffers[jb.frameId];
+        }
+        return jb;
+    }
+
+    function decodeNext(decoder: ImageDecoder) {
+        decoder.onmessage = null;
+        decoder.onerror = null;
+        // const entry = decodingQueue.pop();
+
+        // if (entry) {
+        //     loadImageWithWorker(entry);
+        // }
+    }
+
+    function loadImageWithWorker(entry: EncodedEntry): Promise<JitterBuffer> {
         const decoder = imageDecodingWorkers.filter(isDecoderReady)[0];
 
         return new Promise((resolve, reject) => {
             if (decoder) {
                 decoder.onmessage = (e) => {
-                    decoder.onmessage = null;
+                    const { frameId, header } = entry;
+                    decodeNext(decoder);
+                    const jb = onSegmentReceived(frameId);
                     if (e.data.error) {
-                        reject({ error: e.data.error, frameId });
+                        if (!jb.isFailed) {
+                            jb.isFailed = true;
+                            reject({ error: e.data.error, frameId });
+                        }
                     } else {
-                        const [imageBitmap] = e.data;
-                        resolve(imageBitmap);
+                        const [image] = e.data as [ImageBitmap];
+                        if (jb.isFailed) {
+                            image.close();
+                        } else {
+                            jb.segments.push({ image, header });
+                            if (jb.pending === 0) {
+                                resolve(jb);
+                            }
+                        }
                     }
                 };
                 decoder.onerror = (e) => {
-                    decoder.onmessage = null;
+                    const { frameId } = entry;
+                    decodeNext(decoder);
                     reject({ error: e.error, frameId });
                 };
-                decoder.postMessage([frameId, imageView.buffer, imageView.byteOffset, imageView.length],
-                    [imageView.buffer]);
+
+                const { frameId, bytes } = entry;
+                decoder.postMessage([frameId, bytes.buffer, bytes.byteOffset, bytes.length], [bytes.buffer]);
             } else {
-                reject({ frameId, error: null });
+                const { frameId } = entry;
+                // if (decodingQueue.length < imageDecodingWorkers.length) {
+                //     decodingQueue.push(entry);
+                // } else {
+                    console.warn(`Decoding queue is full, rejecting frame ${frameId}`);
+                    reject({ frameId, error: null });
+                //}
             }
         });
     }
@@ -90,17 +156,16 @@ namespace SocketThread {
             } else {
                 // Received encoded image with stats header
                 // See C# FrameHeader struct
-                const headerSize = 8 * 8;
+                const headerSize = 10 * 8;
 
                 const buffer: ArrayBuffer = evt.data;
-                const imgView = new Uint8Array(buffer, headerSize);
+                const bytes = new Uint8Array(buffer, headerSize);
 
                 let i = 0;
                 const dblView = new Float64Array(buffer, 0, headerSize);
-                const frameId = dblView[i++] | 0;
 
-                const header: FrameHeader = {
-                    frameId,
+                const header: SegmentHeader = {
+                    frameId: dblView[i++] | 0,
                     frameTime: dblView[i++],
                     bandWidth: dblView[i++],
                     frameRate: dblView[i++],
@@ -108,12 +173,16 @@ namespace SocketThread {
                     transmitDuration: dblView[i++],
                     compressDuration: dblView[i++],
                     frameDuration: dblView[i++],
+                    segmentX: dblView[i++] | 0,
+                    segmentY: dblView[i++] | 0,
                 }
 
                 postResponse("onDecodeBegin", header);
 
-                loadImageWithWorker(frameId, imgView).then(image => {
-                    postResponse("onDecodeSuccess", { frameId, image }, [image]);
+                const { frameId } = header;
+
+                loadImageWithWorker({frameId, bytes, header}).then(jitterBuffer => {
+                    postResponse("onDecodeSuccess", jitterBuffer, jitterBuffer.segments.map(s => s.image));
                 }, payload => {
                     postResponse("onDecodeFailure", payload);
                 });

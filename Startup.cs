@@ -51,7 +51,7 @@ namespace MotionJpegLatencyTest
                         try
                         {
                             WebSocket webSocket = await context.WebSockets.AcceptWebSocketAsync();
-                            await RenderLoop.Run(webSocket, default);
+                            await RenderLoop.Run(webSocket);
                         }
                         catch (Exception ex)
                         {

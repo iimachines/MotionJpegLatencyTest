@@ -97,7 +97,7 @@ namespace UIThread {
             timelineElem.style.height = timelineHeight + "px";
 
             const ctx = setupPixelSharpCanvas(timelineElem, timelineWidth, timelineHeight);
-            ctx.font = "8px sans-serif";
+            ctx.font = "7px 'Arial Narrow', sans-serif";
             ctx.textAlign = "left";
 
             ctx.clearRect(0, 0, timelineWidth, timelineHeight);
@@ -110,7 +110,7 @@ namespace UIThread {
         }
 
         function getTimelineXY(timeMS: number): [number, number] {
-            const pixelsPerSecond = timelineWidth * 2;
+            const pixelsPerSecond = timelineWidth * 3;
             const offset = (timeMS - timelineStartTime) * pixelsPerSecond / 1000;
             const row = Math.floor(offset / timelineWidth);
             const x = Math.round(offset % timelineWidth);
@@ -221,14 +221,24 @@ namespace UIThread {
             const [x, y] = getTimelineXY(timeMS);
 
             const ctx = timelineElem.getContext("2d")!;
-            ctx.fillStyle = eventColor[kind] || "yellow";
+            const fill = eventColor[kind] || "yellow";;
+            ctx.fillStyle = fill;
             ctx.fillRect(x, y, 1, timelineRowHeight);
 
-            ctx.save();
-            ctx.translate(x, y);
-            ctx.rotate(Math.PI / 2);
-            ctx.fillText(frameId.toString(10), kind * (timelineRowHeight - 4) / eventCount, -2);
-            ctx.restore();
+            //ctx.save();
+            //ctx.translate(x, y);
+            //ctx.rotate(Math.PI / 2);
+            ctx.textBaseline = "top";
+            const text = frameId.toString(10);
+            const textX = x;
+            const textY = y + kind * (timelineRowHeight - 8) / eventCount;
+
+            const tm = ctx.measureText(text);
+            ctx.fillStyle = fill;
+            ctx.fillRect(textX, textY, tm.width + 2, 10);
+            ctx.fillStyle = "black";
+            ctx.fillText(frameId.toString(10), textX + 1, textY + 1);
+            //ctx.restore();
         }
 
         function sendJson(action: string, payload: any) {
@@ -462,11 +472,11 @@ namespace UIThread {
                     }
 
                     case "onDecodeBegin": {
-                        const { frameId, frameTime } = payload as FrameHeader;
+                        const { frameId, frameTime } = payload as SegmentHeader;
                         drawTimeEvent(EventKind.Response, frameId);
 
                         // Update stats
-                        if (frameTime > currentFrameTime) {
+                        if (currentFrameTime >= 0 && frameTime > currentFrameTime) {
                             log(`Frames out of order! ${frameTime}#${frameId} arrived after current ${currentFrameTime}#${currentFrameId}!`);
                         }
 
@@ -485,21 +495,32 @@ namespace UIThread {
                             ctx.fillText(line, x, y);
                             y += 12;
                         }
-                        
+
                         break;
                     }
 
                     case "onDecodeSuccess": {
-                        const { frameId, image } = payload as { frameId: number, image: DecodedImage };
-                        if (image) {
+                        const { frameId, segments } = payload as JitterBuffer
+                        if (segments) {
                             drawTimeEvent(EventKind.Decoded, frameId);
                             if (frameId > imageFrameId) {
                                 const ctx = imageElem.getContext("2d")!;
                                 ctx.imageSmoothingEnabled = false;
-                                ctx.drawImage(image, 0, 0);
-                            }
-                            if ("close" in image) {
-                                image.close();
+                                for (const segment of segments) {
+                                    const { image, header } = segment;
+                                    ctx.drawImage(image, header.segmentX, header.segmentY);
+                                }
+
+                                // TODO: Close might be slow, we call this in the next tick.
+                                new Promise(resolve => {
+                                    for (const segment of segments) {
+                                        const { image } = segment;
+                                        if ("close" in image) {
+                                            image.close();
+                                        }
+                                    }
+                                    resolve();
+                                });
                             }
                         }
                         break;
